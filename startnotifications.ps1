@@ -1,2 +1,0 @@
-./ccss_ticketing_venv/Scripts/activate
-python ccss_ticketing_notify.py
