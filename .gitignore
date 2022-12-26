@@ -154,4 +154,4 @@ cython_debug/
 ccss_ticketing_venv/
 ccss_ticketing_notify.py
 startnotifications.ps1
-install_ccss_notifications_github.bat
+install_ccss_notifications.bat
