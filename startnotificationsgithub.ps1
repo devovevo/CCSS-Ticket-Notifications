@@ -16,7 +16,7 @@ for(;;) {
         
         $proc = Get-Process -Name chromedriver | Sort-Object -Property ProcessName -Unique -ErrorActionSilentlyContinue
         
-        If (!$proc -or ($proc.Responding -eq $false) –or ($proc.WorkingSet -GT 50000*1024)) 
+        If (!$proc -or ($proc.Responding -eq $false) -or ($proc.WorkingSet -GT 50000*1024)) 
         {
             $proc.Kill()
             Start-Sleep -s 10
