@@ -1,6 +1,8 @@
 import time
 import sys
 import atexit
+import os
+import subprocess
 
 from selenium import webdriver
 
@@ -15,8 +17,9 @@ from selenium.webdriver.chrome.options import Options
 
 from win11toast import notify
 
-wait_time_before_ticket_check = 120
-wait_time_for_button_load = 90
+wait_time_before_ticket_check = 60
+wait_time_for_button_load = 20
+wait_time_for_ticket_load = 20
 wait_time_for_cancel_load = 20
 
 wait_time_for_bad_connection = 5
@@ -25,6 +28,8 @@ max_num_failed_loads = 5
 current_num_failed_loads = 0
 
 tdx_url = "https://tdx.cornell.edu/TDNext/Home/Desktop/Default.aspx"
+
+resp_group_notify = "all"
 
 username = ""
 password = ""
@@ -51,7 +56,17 @@ class Ticket:
 
 chrome_custom_options = Options()
 chrome_custom_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+chrome_custom_options.add_argument("start-maxixmized")
+chrome_custom_options.add_argument("enable-automation")
 chrome_custom_options.add_argument("--headless")
+chrome_custom_options.add_argument("--window-size=1280,720")
+chrome_custom_options.add_argument("--disable-extensions")
+chrome_custom_options.add_argument("--dns-prefetch-disable")
+chrome_custom_options.add_argument("--disable-dev-shm-usage")
+#chrome_custom_options.add_argument("--disable-gpu")
+chrome_custom_options.add_argument("--disable-browser-side-navigation")
+chrome_custom_options.page_load_strategy = 'eager'
+chrome_custom_options.add_argument("enable-features=NetworkServiceInProcess")
 
 driver = webdriver.Chrome(options=chrome_custom_options)
 
@@ -61,6 +76,8 @@ def exit_handler():
 atexit.register(exit_handler)
 
 def loginCornellSSO():
+    global current_num_failed_loads
+
     username_element = None
     password_element = None
     submit_button_element = None
@@ -81,10 +98,11 @@ def loginCornellSSO():
 
             current_num_failed_loads = 0
         except TimeoutException:
-            print("Couldn't find login elements, and as such can't move on")
+            print("Couldn't find login elements, and as such can't move on. Retrying...")
             current_num_failed_loads += 1
 
             if (current_num_failed_loads > max_num_failed_loads):
+                print("Max number of failed loads reached. Qutting...")
                 logfile = open("logfile.txt", "a")
                 logfile.write("Current number of failed loads: " + current_num_failed_loads)
 
@@ -112,11 +130,17 @@ def closePopup():
         print("No close button found, not a serious error.")
 
 def duoLogin():
+    global current_num_failed_loads
     duoPushButton = None
-    driver.switch_to.frame("prompt")
 
     while(duoPushButton == None and driver.current_url != tdx_url):
         try:
+            duoIframe = WebDriverWait(driver, wait_time_for_button_load).until(
+                EC.visibility_of_element_located((By.ID, "duo_iframe"))
+            )
+
+            driver.switch_to.frame(duoIframe)
+
             duoPushButton = WebDriverWait(driver, wait_time_for_button_load).until(
                 EC.visibility_of_element_located((By.CLASS_NAME, "auth-button positive"))
             )
@@ -124,10 +148,11 @@ def duoLogin():
             duoPushButton.click()
             current_num_failed_loads = 0
         except TimeoutException:
-            print("Could not find duo login button, so can't login to system")
+            print("Could not find duo login button, so can't login to system. Retrying...")
             current_num_failed_loads += 1
 
             if(current_num_failed_loads > max_num_failed_loads):
+                print("Max number of failed loads reached. Quitting...")
                 logfile = open("logfile.txt", "a")
                 logfile.write("Current number of failed loads: " + current_num_failed_loads)
                 
@@ -136,7 +161,26 @@ def duoLogin():
         
             time.sleep(wait_time_for_bad_connection)
 
+CMD = '''
+on run argv
+    display notification (item 1 of argv) with title (item 2 of argv) sound name (item 3 of argv)
+end run
+'''
+
+def appleNotify(title, text):
+  subprocess.call(['osascript', '-e', CMD, text, title, "Glass"])
+
+def notifyPlatformDependent(newTicket):
+    oper_system = os.name()
+
+    if (oper_system == "nt"):
+        notify(newTicket.title + " from " + newTicket.requestor, newTicket.description or "No description given", icon=ccss_icon, on_click=newTicket.url, button={'activationType': 'protocol', 'arguments': newTicket.url, 'content': 'Open Ticket'})
+    elif (oper_system == "unix"):
+        appleNotify(newTicket.title + " from " + newTicket.requestor, newTicket.description or "No description given")
+
 def checkTickets():
+    global current_num_failed_loads
+
     ticketElements = []
     currentTicketIDs = []
 
@@ -155,8 +199,8 @@ def checkTickets():
         driver.switch_to.frame("appDesktop")
 
         try:
-            ticketElements = WebDriverWait(driver, wait_time_for_button_load).until(
-                EC.visibility_of_any_elements_located((By.XPATH, "//tr[not(contains(@class, 'TDGridHeader'))]"))
+            ticketElements = WebDriverWait(driver, wait_time_for_ticket_load).until(
+                EC.visibility_of_any_elements_located((By.XPATH, "//dev[contains(@id, '102547')]/tr[not(contains(@class, 'TDGridHeader'))]"))
             )
         except TimeoutException:
             print("No tickets found")
@@ -184,23 +228,23 @@ def checkTickets():
         for newTicket in newTickets:
             driver.get(newTicket.url)
 
-            ticketDescription = None
+            ticketDescription = ""
 
-            while(ticketDescription == None):
-                try:
-                    descriptionElement = WebDriverWait(driver, wait_time_for_button_load).until(
-                        EC.visibility_of_element_located((By.ID, "ttDescription"))
-                    )
+            try:
+                descriptionElement = WebDriverWait(driver, wait_time_for_button_load).until(
+                    EC.visibility_of_element_located((By.ID, "ttDescription"))
+                )
 
-                    ticketDescription = descriptionElement.text
-                except TimeoutException:
-                    print("No description found")
+                ticketDescription = descriptionElement.text
+            except TimeoutException:
+                print("No ticket description found.")
 
-                    time.sleep(wait_time_for_bad_connection)
+                time.sleep(wait_time_for_bad_connection)
 
             newTicket.description = ticketDescription
 
-            notify(newTicket.title + " from " + newTicket.requestor, newTicket.description, icon=ccss_icon, button={'activationType': 'protocol', 'arguments': newTicket.url, 'content': 'Open Ticket'})
+            if (newTicket.respgroup == resp_group_notify or newTicket.respgroup == "all"):
+                notifyPlatformDependent()
 
         ticketElements.clear()
         newTickets.clear()
