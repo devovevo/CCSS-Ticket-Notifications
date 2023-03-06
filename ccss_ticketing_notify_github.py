@@ -200,8 +200,10 @@ def checkTickets():
 
         try:
             ticketElements = WebDriverWait(driver, wait_time_for_ticket_load).until(
-                EC.visibility_of_any_elements_located((By.XPATH, "//dev[contains(@id, '102547')]/tr[not(contains(@class, 'TDGridHeader'))]"))
+                EC.visibility_of_any_elements_located((By.XPATH, "//div[contains(@id, '102547')]//tr[not(contains(@class, 'TDGridHeader'))]"))
             )
+
+            print(ticketElements);
         except TimeoutException:
             print("No tickets found")
 
