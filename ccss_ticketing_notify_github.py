@@ -12,6 +12,8 @@ from selenium.webdriver.common.by import By
 
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 from selenium.webdriver.chrome.options import Options
 
@@ -68,7 +70,7 @@ chrome_custom_options.add_argument("--disable-browser-side-navigation")
 chrome_custom_options.page_load_strategy = 'eager'
 chrome_custom_options.add_argument("enable-features=NetworkServiceInProcess")
 
-driver = webdriver.Chrome(options=chrome_custom_options)
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_custom_options)
 
 def exit_handler():
     driver.quit()
